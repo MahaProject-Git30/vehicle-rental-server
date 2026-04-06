@@ -121,7 +121,7 @@ export const forgotPassword = async (req, res) => {
 
     await user.save();
 
-    const resetLink = `${process.env.CLIENT_URL}/change-password/${token}`;
+    const resetLink = `${process.env.CLIENT_URL}/reset-password/${token}`;
 
     await tranEmailApi.sendTransacEmail({
       sender: {
