@@ -19,7 +19,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: "https://onlinevehical.netlify.app/",
+    origin: "https://onlinevehical.netlify.app",
     credentials: true,
   }),
 );
