@@ -1,11 +1,19 @@
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import transporter from "../config/mail.js";
 import crypto from "crypto";
 import dotenv from "dotenv";
+import SibApiV3Sdk from "sib-api-v3-sdk";
 
 dotenv.config();
+
+// ================= BREVO SETUP =================
+
+const client = SibApiV3Sdk.ApiClient.instance;
+const apiKey = client.authentications["api-key"];
+apiKey.apiKey = process.env.BREVO_API_KEY;
+
+const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 
 // ================= REGISTER =================
 
@@ -35,6 +43,7 @@ export const registerUser = async (req, res) => {
     res.status(201).json({
       message: "User registered successfully",
     });
+
   } catch (error) {
     console.log("REGISTER ERROR:", error);
 
@@ -66,9 +75,11 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
     res.json({
       token,
@@ -76,10 +87,10 @@ export const loginUser = async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role,
         mobile: user.mobile,
       },
     });
+
   } catch (error) {
     console.log("LOGIN ERROR:", error);
 
@@ -93,63 +104,49 @@ export const loginUser = async (req, res) => {
 
 export const forgotPassword = async (req, res) => {
   try {
-    console.log("STEP 1: Request received");
-
     const { email } = req.body;
-
-    console.log("STEP 2: Email:", email);
 
     const user = await User.findOne({ email });
 
     if (!user) {
-      console.log("User not found");
       return res.status(404).json({
         message: "User not found",
       });
     }
 
-    console.log("STEP 3: User found");
-
     const token = crypto.randomBytes(32).toString("hex");
-
-    console.log("STEP 4: Token generated:", token);
 
     user.resetToken = token;
     user.resetTokenExpire = Date.now() + 60 * 60 * 1000;
 
     await user.save();
 
-    console.log("STEP 5: Token saved");
+    const resetLink = `${process.env.CLIENT_URL}/change-password/${token}`;
 
-    const resetLink = `${process.env.CLIENT_URL}/reset-password/${token}`;
-
-    console.log("STEP 6: Reset Link:", resetLink);
-
-    await transporter.verify();
-
-    console.log("STEP 7: SMTP Connected");
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: "DriveNow Password Reset",
-      html: `
+    await tranEmailApi.sendTransacEmail({
+      sender: {
+        email: process.env.SENDER_EMAIL,
+        name: "DriveNow",
+      },
+      to: [{ email }],
+      subject: "Password Reset",
+      htmlContent: `
         <h2>Password Reset</h2>
-        <p>Click below link to reset password</p>
+        <p>Click below link to reset your password</p>
         <a href="${resetLink}">${resetLink}</a>
+        <p>This link will expire in 1 hour</p>
       `,
     });
-
-    console.log("STEP 8: Mail sent");
 
     res.json({
       message: "Reset link sent to email",
     });
+
   } catch (error) {
     console.log("MAIL ERROR:", error);
 
     res.status(500).json({
-      message: "mail failed",
+      message: "Mail failed",
       error: error.message,
     });
   }
@@ -161,8 +158,6 @@ export const resetPassword = async (req, res) => {
   try {
     const { token } = req.params;
     const { password } = req.body;
-
-    console.log("Reset token:", token);
 
     const user = await User.findOne({
       resetToken: token,
@@ -186,6 +181,7 @@ export const resetPassword = async (req, res) => {
     res.json({
       message: "Password reset successful",
     });
+
   } catch (error) {
     console.log("RESET ERROR:", error);
 
@@ -224,18 +220,24 @@ export const sendLoginOTP = async (req, res) => {
 
     await user.save();
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
+    await tranEmailApi.sendTransacEmail({
+      sender: {
+        email: process.env.SENDER_EMAIL,
+        name: "DriveNow",
+      },
+      to: [{ email }],
       subject: "Your Login OTP",
-      text: `Your OTP is ${otp}`,
+      htmlContent: `
+        <h2>Your OTP</h2>
+        <h1>${otp}</h1>
+        <p>This OTP will expire in 5 minutes</p>
+      `,
     });
-
-    console.log("OTP sent to:", email);
 
     res.json({
       message: "OTP sent to email",
     });
+
   } catch (error) {
     console.log("OTP ERROR:", error);
 
@@ -259,9 +261,11 @@ export const verifyOTP = async (req, res) => {
       });
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
     user.otp = null;
     user.otpExpire = null;
@@ -272,6 +276,7 @@ export const verifyOTP = async (req, res) => {
       message: "Login successful",
       token,
     });
+
   } catch (error) {
     console.log("VERIFY OTP ERROR:", error);
 

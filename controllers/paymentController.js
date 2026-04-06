@@ -3,10 +3,20 @@ import crypto from "crypto";
 import Booking from "../models/Booking.js";
 import Car from "../models/Car.js";
 import User from "../models/User.js";
-import transporter from "../config/mail.js";
-import dotenv from "dotenv";    
+import dotenv from "dotenv";
+import SibApiV3Sdk from "sib-api-v3-sdk";
 
 dotenv.config();
+
+// ================= BREVO SETUP =================
+
+const client = SibApiV3Sdk.ApiClient.instance;
+const apiKey = client.authentications["api-key"];
+apiKey.apiKey = process.env.BREVO_API_KEY;
+
+const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+
+// ================= CREATE ORDER =================
 
 export const createOrder = async (req, res) => {
   try {
@@ -30,10 +40,12 @@ export const createOrder = async (req, res) => {
     });
 
   } catch (error) {
-    console.log(error);
+    console.log("ORDER ERROR:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
+
+// ================= VERIFY PAYMENT =================
 
 export const verifyPayment = async (req, res) => {
   try {
@@ -89,28 +101,31 @@ export const verifyPayment = async (req, res) => {
 
     await booking.save();
 
-    // 📩 EMAIL
+    // 📩 EMAIL (BREVO)
     const car = await Car.findById(carId);
     const user = await User.findById(req.user._id);
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: user.email,
+    await tranEmailApi.sendTransacEmail({
+      sender: {
+        email: process.env.SENDER_EMAIL,
+        name: "DriveNow",
+      },
+      to: [{ email: user.email }],
       subject: "Booking Confirmed 🚗",
-      html: `
-        <h2>Booking Confirmed</h2>
+      htmlContent: `
+        <h2>Booking Confirmed 🚗</h2>
         <p>Hello ${user.name},</p>
-        <p>Your booking is successful.</p>
+        <p>Your booking is successfully confirmed.</p>
 
         <ul>
           <li><b>Car:</b> ${car.name}</li>
           <li><b>Location:</b> ${car.location}</li>
-          <li><b>Start:</b> ${new Date(startDate).toLocaleDateString()}</li>
-          <li><b>End:</b> ${new Date(endDate).toLocaleDateString()}</li>
-          <li><b>Total:</b> ₹${totalPrice}</li>
+          <li><b>Start Date:</b> ${new Date(startDate).toLocaleDateString()}</li>
+          <li><b>End Date:</b> ${new Date(endDate).toLocaleDateString()}</li>
+          <li><b>Total Price:</b> ₹${totalPrice}</li>
         </ul>
 
-        <p>Thank you 🚗</p>
+        <p>Thank you for choosing DriveNow 🚀</p>
       `,
     });
 
@@ -120,7 +135,7 @@ export const verifyPayment = async (req, res) => {
     });
 
   } catch (error) {
-    console.log(error);
+    console.log("PAYMENT ERROR:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
