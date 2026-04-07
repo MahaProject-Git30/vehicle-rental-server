@@ -66,7 +66,7 @@ server
 
 Clone the repository
 
-git clone "my project"
+git clone "https://github.com/MahaProject-Git30/vehicle-rental-server"
 
 Navigate to backend folder
 
